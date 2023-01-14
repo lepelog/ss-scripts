@@ -5,6 +5,7 @@ import sys
 import collections
 import struct
 import dolphin_memory_engine
+from dataclasses import dataclass
 
 def unpack(fields, formatstr, item):
     return (
@@ -16,6 +17,14 @@ def unpack(fields, formatstr, item):
 def read_alloc_node(at: int):
     b=dolphin_memory_engine.read_bytes(at, 0x10)
     return unpack('magic pad size prev next', '>HHIII', b)
+
+@dataclass
+class Node:
+    magic: int
+    pad: int
+    size: int
+    prev: int
+    next: int
 
 def read_allocator_ptr(at:int ):
     ptr = dolphin_memory_engine.read_word(at)
@@ -34,6 +43,13 @@ def iter_pointers(node_head_ptr: int) -> Iterator[int]:
         node = read_alloc_node(node_head_ptr)
         node_head_ptr = node['next']
 
+def iter_nodes(node_head_ptr: int) -> Iterator[Node]:
+    while node_head_ptr != 0:
+        # print(f"{node_head_ptr:X}")
+        node = read_alloc_node(node_head_ptr)
+        node_head_ptr = node['next']
+        yield Node(**node)
+
 def get_sizes(node_head_ptr):
     allocations = []
     while node_head_ptr != 0:
@@ -49,3 +65,11 @@ def print_free_used(heap_ptr):
     used_allocs = get_sizes(heap['usedH'])
     print(f"used : {sum(used_allocs):X}")
     print(f"count: {len(used_allocs)}")
+
+def print_all_allocs(heap_ptr):
+    heap = read_allocator_ptr(heap_ptr)
+    for node in iter_nodes(heap['usedH']):
+        print(node)
+
+def read_null_term_string(s: bytes) -> str:
+    return s.split(b'\x00', 1)[0].decode('ASCII')
